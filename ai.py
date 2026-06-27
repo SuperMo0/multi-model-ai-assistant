@@ -140,32 +140,19 @@ def analyse(
 
     client = get_client(provider.value)
 
-    schema = DocumentSummary.model_json_schema()
-    prompt = (
-        f"{DETAIL_INSTRUCTIONS[detail]}\n\n"
-        f"Respond with a JSON object matching this schema:\n{json.dumps(schema, indent=2)}\n\n"
-        f"Document:\n{text}"
-    )
-
+    prompt = f"{DETAIL_INSTRUCTIONS[detail]}\n\nDocument:\n{text}"
     messages = [
-        {"role": "system", "content": "You are a document analysis assistant. Respond only with valid JSON."},
+        {"role": "system", "content": "You are a document analysis assistant."},
         {"role": "user", "content": prompt},
     ]
 
     start = time.perf_counter()
-    result = client.complete(messages, model=model)
-    latency = time.perf_counter() - start
-
-    if not result:
-        console.print("[red]Request failed.[/red]")
-        raise typer.Exit(1)
-
     try:
-        raw = result.text.strip().removeprefix("```json").removesuffix("```").strip()
-        summary = DocumentSummary.model_validate_json(raw)
+        summary, result = client.parse(messages, DocumentSummary, model=model)
     except Exception as e:
-        console.print(f"[red]Failed to parse response: {e}[/red]")
+        console.print(f"[red]Request failed: {e}[/red]")
         raise typer.Exit(1)
+    latency = time.perf_counter() - start
 
     log_response(result, provider.value, "analyse", latency)
 

@@ -51,6 +51,16 @@ class AnthropicClient:
     def complete(self, messages: list[MessageParam], model: str = "", stream: bool = False) -> LLMResponse:
         return self._execute_call(messages, model or self.model, stream)
 
+    def parse(self, messages, response_type, model="", **kwargs):
+        model = model or self.model
+        response = self.client.messages.parse(
+            model=model,
+            messages=messages,
+            max_tokens=2048,
+            output_format=response_type,
+        )
+        return response.parsed_output, self._parse(response, model)
+
     def _parse(self, response: Message, model: str) -> LLMResponse:
         usage = response.usage
         prompt_tokens = usage.input_tokens

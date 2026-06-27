@@ -1,5 +1,7 @@
-from typing import Protocol, runtime_checkable
+from typing import Protocol, Type, TypeVar, runtime_checkable
 from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class TokenUsage(BaseModel):
@@ -19,3 +21,4 @@ class LLMResponse(BaseModel):
 class LLMClient(Protocol):
     model: str
     def complete(self, messages: list[dict], **kwargs) -> LLMResponse: ...
+    def parse(self, messages: list[dict], response_type: Type[T], **kwargs) -> tuple[T, LLMResponse]: ...

@@ -43,6 +43,15 @@ class OpenAIClient:
     def complete(self, messages: list[ChatCompletionMessageParam], model: str = "", stream: bool = False) -> LLMResponse:
         return self._execute_call(messages, model or self.model, stream)
 
+    def parse(self, messages, response_type, model="", **kwargs):
+        model = model or self.model
+        completion = self.client.chat.completions.parse(
+            model=model,
+            messages=messages,
+            response_format=response_type,
+        )
+        return completion.choices[0].message.parsed, self._parse(completion, model)
+
     def _parse(self, response: ChatCompletion, model: str) -> LLMResponse:
         usage = response.usage
         prompt_tokens = 0
