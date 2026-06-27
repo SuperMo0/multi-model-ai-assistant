@@ -42,18 +42,26 @@ class OpenAIClient:
 
     def _parse(self, response, model: str) -> dict:
         usage = response.usage
-        pricing = PRICING.get(model, PRICING[DEFAULT_MODEL])
-        cost = (
-            usage.prompt_tokens * pricing["input"]
-            + usage.completion_tokens * pricing["output"]
-        ) / 1_000_000
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        cost = 0.0
+        if usage is not None:
+            prompt_tokens = usage.prompt_tokens
+            completion_tokens = usage.completion_tokens
+            total_tokens = usage.total_tokens
+            pricing = PRICING.get(model, PRICING[DEFAULT_MODEL])
+            cost = (
+                prompt_tokens * pricing["input"]
+                + completion_tokens * pricing["output"]
+            ) / 1_000_000
         return {
             "text": response.choices[0].message.content or "",
             "model": model,
             "tokens": {
-                "prompt": usage.prompt_tokens,
-                "completion": usage.completion_tokens,
-                "total": usage.total_tokens,
+                "prompt": prompt_tokens,
+                "completion": completion_tokens,
+                "total": total_tokens,
             },
             "cost": cost,
         }
@@ -63,29 +71,39 @@ class OpenAIClient:
             model=model,
             messages=messages,
             stream=True,
+            stream_options={"include_usage": True}
         )
         chunks = []
+        final_usage = None
         for chunk in stream:
             delta = chunk.choices[0].delta.content
             if delta:
                 print(delta, end="", flush=True)
                 chunks.append(delta)
+            if chunk.usage is not None:
+                final_usage = chunk.usage
         print()
         text = "".join(chunks)
-        prompt_tokens = sum(len(m["content"].split()) * 4 // 3 for m in messages)
-        completion_tokens = len(text.split()) * 4 // 3
-        pricing = PRICING.get(model, PRICING[DEFAULT_MODEL])
-        cost = (
-            prompt_tokens * pricing["input"]
-            + completion_tokens * pricing["output"]
-        ) / 1_000_000
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        cost = 0.0
+        if final_usage is not None:
+            prompt_tokens = final_usage.prompt_tokens
+            completion_tokens = final_usage.completion_tokens
+            total_tokens = final_usage.total_tokens
+            pricing = PRICING.get(model, PRICING[DEFAULT_MODEL])
+            cost = (
+                prompt_tokens * pricing["input"]
+                + completion_tokens * pricing["output"]
+            ) / 1_000_000
         return {
             "text": text,
             "model": model,
             "tokens": {
                 "prompt": prompt_tokens,
                 "completion": completion_tokens,
-                "total": prompt_tokens + completion_tokens,
+                "total": total_tokens,
             },
             "cost": cost,
         }
