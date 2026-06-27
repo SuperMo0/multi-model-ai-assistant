@@ -1,5 +1,6 @@
 import os
 import anthropic
+from anthropic.types import TextBlock
 from dotenv import load_dotenv
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -49,7 +50,7 @@ class AnthropicClient:
             + usage.output_tokens * pricing["output"]
         ) / 1_000_000
         return {
-            "text": response.content,
+            "text": "".join(block.text for block in response.content if isinstance(block, TextBlock)),
             "model": model,
             "tokens": {
                 "prompt": usage.input_tokens,
