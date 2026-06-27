@@ -64,9 +64,7 @@ def chat(
     system: Annotated[str, typer.Option("--system")] = "You are a helpful assistant.",
     stream: Annotated[bool, typer.Option("--stream")] = False,
 ) -> None:
-    """
-    chat with AI
-    """
+    """Start an interactive chat session."""
     client = get_client(provider.value)
     if model:
         client.model = model
@@ -129,6 +127,7 @@ def analyse(
     detail: Annotated[Detail, typer.Option("--detail")] = Detail.standard,
     as_json: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
+    """Analyse a .txt or .pdf file and print a structured summary."""
     try:
         text, word_count = read_file(file)
     except (FileNotFoundError, ValueError) as e:
@@ -204,6 +203,7 @@ async def _call(provider: str, prompt: str) -> tuple[str, LLMResponse, float]:
 def compare(
     prompt: Annotated[str, typer.Argument()],
 ) -> None:
+    """Send the same prompt to both providers and show responses side by side."""
     async def run():
         return await asyncio.gather(
             _call("openai", prompt),
@@ -228,6 +228,7 @@ def compare(
 
 @app.command()
 def costs() -> None:
+    """Show cost breakdown from logged API calls."""
     logger.dashboard()
 
 
