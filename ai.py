@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from enum import Enum
@@ -6,6 +7,8 @@ from typing import Annotated
 
 import typer
 from rich.console import Console
+from rich.columns import Columns
+from rich.panel import Panel
 
 from llm import get_client
 from llm.openai_client import CAPABLE_MODEL as OAI_CAPABLE, DEFAULT_MODEL as OAI_DEFAULT
@@ -176,6 +179,40 @@ def analyse(
         for a in summary.recommended_actions:
             console.print(f"  • {a}")
     console.print(f"\n[dim]cost: ${result['cost']:.6f}  latency: {latency:.2f}s[/dim]")
+
+
+async def _call(provider: str, prompt: str) -> tuple[str, dict, float]:
+    client = get_client(provider)
+    messages = [{"role": "user", "content": prompt}]
+    start = time.perf_counter()
+    result = await asyncio.get_event_loop().run_in_executor(None, lambda: client.complete(messages))
+    latency = time.perf_counter() - start
+    return provider, result, latency
+
+
+@app.command()
+def compare(
+    prompt: Annotated[str, typer.Argument()],
+) -> None:
+    async def run():
+        return await asyncio.gather(
+            _call("openai", prompt),
+            _call("anthropic", prompt),
+        )
+
+    results = asyncio.run(run())
+
+    panels = []
+    for provider, result, latency in results:
+        if not result:
+            panels.append(Panel("[red]Failed[/red]", title=provider))
+            continue
+        t = result["tokens"]
+        footer = f"tokens: {t['prompt']}+{t['completion']}  cost: ${result['cost']:.6f}  latency: {latency:.2f}s"
+        panels.append(Panel(result["text"], title=provider, subtitle=footer))
+        log_response(result, provider, "compare", latency)
+
+    console.print(Columns(panels, equal=True))
 
 
 if __name__ == "__main__":
