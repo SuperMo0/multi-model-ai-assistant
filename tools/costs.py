@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,23 +31,16 @@ class CostLogger:
             f.write(json.dumps(entry) + "\n")
 
     def dashboard(self) -> None:
-        if not LOG_PATH.exists():
-            print("No cost data yet — cost_log.jsonl not found.")
-            return
-
-        entries = []
-        with LOG_PATH.open() as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    entries.append(json.loads(line))
-
-        if not entries:
+        if not LOG_PATH.exists() or LOG_PATH.stat().st_size == 0:
             print("No cost data yet.")
             return
 
-        now = datetime.now(timezone.utc)
-        today = now.date()
+        entries = []
+        for line in LOG_PATH.read_text().splitlines():
+            if line.strip():
+                entries.append(json.loads(line))
+
+        today = datetime.now(timezone.utc).date()
         week_start = today.toordinal() - today.weekday()
 
         total_all = 0.0
@@ -56,44 +48,31 @@ class CostLogger:
         total_week = 0.0
         by_provider: dict[str, float] = {}
         by_mode: dict[str, float] = {}
-        most_expensive = entries[0]
+        priciest = entries[0]
 
-        for entry in entries:
-            ts = datetime.fromisoformat(entry["timestamp"]).date()
-            cost = entry["cost_usd"]
-            total_all += cost
-            if ts == today:
-                total_today += cost
-            if ts.toordinal() >= week_start:
-                total_week += cost
-            by_provider[entry["provider"]] = by_provider.get(entry["provider"], 0.0) + cost
-            by_mode[entry["mode"]] = by_mode.get(entry["mode"], 0.0) + cost
-            if cost > most_expensive["cost_usd"]:
-                most_expensive = entry
+        for e in entries:
+            d = datetime.fromisoformat(e["timestamp"]).date()
+            c = e["cost_usd"]
+            total_all += c
+            if d == today:
+                total_today += c
+            if d.toordinal() >= week_start:
+                total_week += c
+            by_provider[e["provider"]] = by_provider.get(e["provider"], 0.0) + c
+            by_mode[e["mode"]] = by_mode.get(e["mode"], 0.0) + c
+            if c > priciest["cost_usd"]:
+                priciest = e
 
-        width = os.get_terminal_size().columns
+        print(f"Today: ${total_today:.6f}  |  This week: ${total_week:.6f}  |  All time: ${total_all:.6f}")
 
-        def section(title: str) -> None:
-            print(f"\n{'─' * width}")
-            print(f"  {title}")
-            print(f"{'─' * width}")
-
-        section("COST DASHBOARD")
-        print(f"  Today          ${total_today:.6f}")
-        print(f"  This week      ${total_week:.6f}")
-        print(f"  All time       ${total_all:.6f}")
-
-        section("By provider")
+        print("\nBy provider:")
         for provider, cost in sorted(by_provider.items()):
-            print(f"  {provider:<20} ${cost:.6f}")
+            print(f"  {provider}: ${cost:.6f}")
 
-        section("By mode")
+        print("\nBy mode:")
         for mode, cost in sorted(by_mode.items()):
-            print(f"  {mode:<20} ${cost:.6f}")
+            print(f"  {mode}: ${cost:.6f}")
 
-        section("Most expensive call")
-        e = most_expensive
-        print(f"  {e['timestamp']}  {e['provider']} / {e['model']}")
-        print(f"  Mode: {e['mode']}   Cost: ${e['cost_usd']:.6f}   Latency: {e['latency_s']:.2f}s")
-        print(f"  Tokens: {e['prompt_tokens']} in / {e['completion_tokens']} out")
-        print()
+        p = priciest
+        print(f"\nMost expensive: {p['provider']}/{p['model']} [{p['mode']}]")
+        print(f"  Cost: ${p['cost_usd']:.6f}  Tokens: {p['prompt_tokens']} in / {p['completion_tokens']} out  Latency: {p['latency_s']:.2f}s")
