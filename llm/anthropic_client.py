@@ -1,6 +1,7 @@
 import os
 import anthropic
 from dotenv import load_dotenv
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
@@ -22,19 +23,23 @@ class AnthropicClient:
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
 
+    @retry(
+        retry=retry_if_exception_type(anthropic.RateLimitError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4),
+    )
+    def _execute_call(self, messages: list[dict], model: str, stream: bool) -> dict:
+        if stream:
+            return self._stream(messages, model)
+        response = self.client.messages.create(
+            model=model,
+            messages=messages,
+            max_tokens=1024,
+        )
+        return self._parse(response, model)
+
     def complete(self, messages: list[dict], model: str = "", stream: bool = False) -> dict:
-        model = model or self.model
-        try:
-            if stream:
-                return self._stream(messages, model)
-            response = self.client.messages.create(
-                model=model,
-                messages=messages,
-                max_tokens=1024,
-            )
-            return self._parse(response, model)
-        except anthropic.RateLimitError:
-            return {}
+        return self._execute_call(messages, model or self.model, stream)
 
     def _parse(self, response, model: str) -> dict:
         usage = response.usage

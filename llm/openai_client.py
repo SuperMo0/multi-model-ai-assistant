@@ -1,7 +1,7 @@
 import os
-import time
 import openai
 from dotenv import load_dotenv
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 load_dotenv()
 
@@ -23,22 +23,22 @@ class OpenAIClient:
         self.client = openai.OpenAI(api_key=api_key)
         self.model = model
 
+    @retry(
+        retry=retry_if_exception_type(openai.RateLimitError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=4)
+    )
+    def _execute_call(self, messages: list[dict], model: str, stream: bool) -> dict:
+        if stream:
+            return self._stream(messages, model)
+        response = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+        )
+        return self._parse(response, model)
+
     def complete(self, messages: list[dict], model: str = "", stream: bool = False) -> dict:
-        model = model or self.model
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                if stream:
-                    return self._stream(messages, model)
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                )
-                return self._parse(response, model)
-            except openai.RateLimitError:
-                if attempt == max_retries - 1:
-                    raise
-                time.sleep(2 ** attempt)
+        return self._execute_call(messages, model or self.model, stream)
 
     def _parse(self, response, model: str) -> dict:
         usage = response.usage
@@ -72,7 +72,6 @@ class OpenAIClient:
                 chunks.append(delta)
         print()
         text = "".join(chunks)
-        # streaming doesn't return usage, estimate from text length
         prompt_tokens = sum(len(m["content"].split()) * 4 // 3 for m in messages)
         completion_tokens = len(text.split()) * 4 // 3
         pricing = PRICING.get(model, PRICING[DEFAULT_MODEL])
