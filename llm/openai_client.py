@@ -2,6 +2,7 @@ import os
 import openai
 from dotenv import load_dotenv
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from llm.base import LLMResponse
 
 load_dotenv()
 
@@ -28,7 +29,7 @@ class OpenAIClient:
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=4)
     )
-    def _execute_call(self, messages: list[dict], model: str, stream: bool) -> dict:
+    def _execute_call(self, messages: list[dict], model: str, stream: bool) -> LLMResponse:
         if stream:
             return self._stream(messages, model)
         response = self.client.chat.completions.create(
@@ -37,10 +38,10 @@ class OpenAIClient:
         )
         return self._parse(response, model)
 
-    def complete(self, messages: list[dict], model: str = "", stream: bool = False) -> dict:
+    def complete(self, messages: list[dict], model: str = "", stream: bool = False) -> LLMResponse:
         return self._execute_call(messages, model or self.model, stream)
 
-    def _parse(self, response, model: str) -> dict:
+    def _parse(self, response, model: str) -> LLMResponse:
         usage = response.usage
         prompt_tokens = 0
         completion_tokens = 0
@@ -66,7 +67,7 @@ class OpenAIClient:
             "cost": cost,
         }
 
-    def _stream(self, messages: list[dict], model: str) -> dict:
+    def _stream(self, messages: list[dict], model: str) -> LLMResponse:
         stream = self.client.chat.completions.create(
             model=model,
             messages=messages,
