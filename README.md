@@ -7,6 +7,10 @@
 ![Rich](https://img.shields.io/badge/Rich-%23FAB005.svg?style=for-the-badge&logo=python&logoColor=black)
 ![uv](https://img.shields.io/badge/uv-DE5FE9?style=for-the-badge&logo=python&logoColor=white)
 
+![demo](assets/preview.gif)
+
+this project is part of my AI learning journey.
+
 in this project I built a CLI tool to chat interactively with OpenAI and Anthropic. I used the builder pattern with an abstract base class that all AI providers need to implement, this way I can switch between models easily without affecting the business code.
 
 I used Typer to read CLI arguments and commands.
