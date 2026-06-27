@@ -7,7 +7,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 load_dotenv()
 
 PRICING = {
-    "claude-haiku-4-5-20251001": {"input": 0.25, "output": 1.25},
+    "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00},
 }
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
