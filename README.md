@@ -37,7 +37,7 @@ the `analyse` command has a couple extra ones:
 
 ## setup
 
-you need python 3.14+ and uv installed
+you need python and uv installed
 
 ```bash
 git clone <repo>
