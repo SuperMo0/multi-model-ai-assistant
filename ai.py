@@ -4,41 +4,25 @@ import time
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
-
 import typer
 from rich.console import Console
 from rich.columns import Columns
 from rich.panel import Panel
-
 from llm import get_client
 from llm.openai_client import CAPABLE_MODEL as OAI_CAPABLE, DEFAULT_MODEL as OAI_DEFAULT
 from llm.anthropic_client import CAPABLE_MODEL as ANT_CAPABLE, DEFAULT_MODEL as ANT_DEFAULT
 from tools.costs import CostLogger
 from tools.document import read_file, DocumentSummary
+from llm.base import LLMResponse
 
 app = typer.Typer(add_completion=False)
 console = Console()
 logger = CostLogger()
+
 SESSIONS_DIR = Path("sessions")
 
 
-class Provider(str, Enum):
-    openai = "openai"
-    anthropic = "anthropic"
-
-
-class Detail(str, Enum):
-    brief = "brief"
-    standard = "standard"
-    detailed = "detailed"
-
-
-DETAIL_INSTRUCTIONS = {
-    Detail.brief: "Provide a brief summary with only the most important points.",
-    Detail.standard: "Provide a standard summary covering all key topics.",
-    Detail.detailed: "Provide a thorough and detailed summary of the entire document.",
-}
-
+# ── helpers ──────────────────────────────────────────────────────────────────
 
 def load_session(name: str) -> list[dict]:
     path = SESSIONS_DIR / f"{name}.json"
@@ -53,16 +37,23 @@ def save_session(name: str, history: list[dict]) -> None:
     path.write_text(json.dumps(history, indent=2))
 
 
-def log_response(result: dict, provider: str, mode: str, latency: float) -> None:
+def log_response(result: LLMResponse, provider: str, mode: str, latency: float) -> None:
     logger.log(
         provider=provider,
-        model=result["model"],
+        model=result.model,
         mode=mode,
-        prompt_tokens=result["tokens"]["prompt"],
-        completion_tokens=result["tokens"]["completion"],
-        cost_usd=result["cost"],
+        prompt_tokens=result.tokens.prompt,
+        completion_tokens=result.tokens.completion,
+        cost_usd=result.cost,
         latency_s=latency,
     )
+
+
+# ── chat ─────────────────────────────────────────────────────────────────────
+
+class Provider(str, Enum):
+    openai = "openai"
+    anthropic = "anthropic"
 
 
 @app.command()
@@ -73,6 +64,9 @@ def chat(
     system: Annotated[str, typer.Option("--system")] = "You are a helpful assistant.",
     stream: Annotated[bool, typer.Option("--stream")] = False,
 ) -> None:
+    """
+    chat with AI
+    """
     client = get_client(provider.value)
     if model:
         client.model = model
@@ -101,17 +95,31 @@ def chat(
             continue
 
         if not stream:
-            console.print(f"[green]{result['text']}[/green]")
+            console.print(f"[green]{result.text}[/green]")
 
-        history.append({"role": "assistant", "content": result["text"]})
+        history.append({"role": "assistant", "content": result.text})
         save_session(session, history)
         log_response(result, provider.value, "chat", latency)
 
-        tokens = result["tokens"]
         console.print(
-            f"[dim]tokens: {tokens['prompt']}+{tokens['completion']}  "
-            f"cost: ${result['cost']:.6f}  latency: {latency:.2f}s[/dim]\n"
+            f"[dim]tokens: {result.tokens.prompt}+{result.tokens.completion}  "
+            f"cost: ${result.cost:.6f}  latency: {latency:.2f}s[/dim]\n"
         )
+
+
+# ── analyse ───────────────────────────────────────────────────────────────────
+
+class Detail(str, Enum):
+    brief = "brief"
+    standard = "standard"
+    detailed = "detailed"
+
+
+DETAIL_INSTRUCTIONS = {
+    Detail.brief: "Provide a brief summary with only the most important points.",
+    Detail.standard: "Provide a standard summary covering all key topics.",
+    Detail.detailed: "Provide a thorough and detailed summary of the entire document.",
+}
 
 
 @app.command()
@@ -154,7 +162,7 @@ def analyse(
         raise typer.Exit(1)
 
     try:
-        raw = result["text"].strip().removeprefix("```json").removesuffix("```").strip()
+        raw = result.text.strip().removeprefix("```json").removesuffix("```").strip()
         summary = DocumentSummary.model_validate_json(raw)
     except Exception as e:
         console.print(f"[red]Failed to parse response: {e}[/red]")
@@ -178,10 +186,12 @@ def analyse(
         console.print("\n[bold]Recommended actions:[/bold]")
         for a in summary.recommended_actions:
             console.print(f"  • {a}")
-    console.print(f"\n[dim]cost: ${result['cost']:.6f}  latency: {latency:.2f}s[/dim]")
+    console.print(f"\n[dim]cost: ${result.cost:.6f}  latency: {latency:.2f}s[/dim]")
 
 
-async def _call(provider: str, prompt: str) -> tuple[str, dict, float]:
+# ── compare ───────────────────────────────────────────────────────────────────
+
+async def _call(provider: str, prompt: str) -> tuple[str, LLMResponse, float]:
     client = get_client(provider)
     messages = [{"role": "user", "content": prompt}]
     start = time.perf_counter()
@@ -207,23 +217,21 @@ def compare(
         if not result:
             panels.append(Panel("[red]Failed[/red]", title=provider))
             continue
-        t = result["tokens"]
-        footer = f"tokens: {t['prompt']}+{t['completion']}  cost: ${result['cost']:.6f}  latency: {latency:.2f}s"
-        panels.append(Panel(result["text"], title=provider, subtitle=footer))
+        footer = f"tokens: {result.tokens.prompt}+{result.tokens.completion}  cost: ${result.cost:.6f}  latency: {latency:.2f}s"
+        panels.append(Panel(result.text, title=provider, subtitle=footer))
         log_response(result, provider, "compare", latency)
 
     console.print(Columns(panels, equal=True))
 
 
-@app.command()
-def costs() -> None:
-    logger.dashboard()
-
+# ── costs ─────────────────────────────────────────────────────────────────────
 
 @app.command()
 def costs() -> None:
     logger.dashboard()
 
+
+# ── entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     app()
