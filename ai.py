@@ -215,5 +215,15 @@ def compare(
     console.print(Columns(panels, equal=True))
 
 
+@app.command()
+def costs() -> None:
+    logger.dashboard()
+
+
+@app.command()
+def costs() -> None:
+    logger.dashboard()
+
+
 if __name__ == "__main__":
     app()
