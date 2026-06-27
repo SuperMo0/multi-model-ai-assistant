@@ -61,18 +61,31 @@ class AnthropicClient:
 
     def _stream(self, messages: list[dict], model: str) -> dict:
         with self.client.messages.stream(
-            model="claude-opus-4-8",
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=256,
+            model=model,
+            messages=messages,
+            max_tokens=1024,
         ) as stream:
             chunks = []
             for text in stream.text_stream:
                 print(text, end="", flush=True)
                 chunks.append(text)
             print()
-            return {
-                "text": "".join(chunks),
-                "model": model,
-                "tokens": {"prompt": 0, "completion": 0, "total": 0},
-                "cost": 0.0,
-            }
+            final_message = stream.get_final_message()
+            prompt_tokens = final_message.usage.input_tokens
+            completion_tokens = final_message.usage.output_tokens
+            total_tokens = prompt_tokens + completion_tokens
+            pricing = PRICING.get(model, PRICING[DEFAULT_MODEL])
+            cost = (
+                prompt_tokens * pricing["input"]
+                + completion_tokens * pricing["output"]
+            ) / 1_000_000
+        return {
+            "text": "".join(chunks),
+            "model": model,
+            "tokens": {
+                "prompt": prompt_tokens,
+                "completion": completion_tokens,
+                "total": total_tokens,
+            },
+            "cost": cost,
+        }
