@@ -15,10 +15,10 @@ CAPABLE_MODEL = "claude-sonnet-4-5"
 
 class AnthropicClient:
     def __init__(self, model: str = DEFAULT_MODEL):
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise EnvironmentError(
-                "OPENAI_API_KEY is not set. Add it to your .env file."
+                "ANTHROPIC_API_KEY is not set. Add it to your .env file."
             )
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
