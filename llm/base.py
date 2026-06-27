@@ -1,13 +1,14 @@
-from typing import Protocol, TypedDict, runtime_checkable
+from typing import Protocol, runtime_checkable
+from pydantic import BaseModel
 
 
-class TokenUsage(TypedDict):
+class TokenUsage(BaseModel):
     prompt: int
     completion: int
     total: int
 
 
-class LLMResponse(TypedDict):
+class LLMResponse(BaseModel):
     text: str
     model: str
     tokens: TokenUsage
