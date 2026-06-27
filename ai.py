@@ -8,7 +8,10 @@ import typer
 from rich.console import Console
 
 from llm import get_client
+from llm.openai_client import CAPABLE_MODEL as OAI_CAPABLE, DEFAULT_MODEL as OAI_DEFAULT
+from llm.anthropic_client import CAPABLE_MODEL as ANT_CAPABLE, DEFAULT_MODEL as ANT_DEFAULT
 from tools.costs import CostLogger
+from tools.document import read_file, DocumentSummary
 
 app = typer.Typer(add_completion=False)
 console = Console()
@@ -19,6 +22,19 @@ SESSIONS_DIR = Path("sessions")
 class Provider(str, Enum):
     openai = "openai"
     anthropic = "anthropic"
+
+
+class Detail(str, Enum):
+    brief = "brief"
+    standard = "standard"
+    detailed = "detailed"
+
+
+DETAIL_INSTRUCTIONS = {
+    Detail.brief: "Provide a brief summary with only the most important points.",
+    Detail.standard: "Provide a standard summary covering all key topics.",
+    Detail.detailed: "Provide a thorough and detailed summary of the entire document.",
+}
 
 
 def load_session(name: str) -> list[dict]:
@@ -93,6 +109,73 @@ def chat(
             f"[dim]tokens: {tokens['prompt']}+{tokens['completion']}  "
             f"cost: ${result['cost']:.6f}  latency: {latency:.2f}s[/dim]\n"
         )
+
+
+@app.command()
+def analyse(
+    file: Annotated[str, typer.Argument()],
+    provider: Annotated[Provider, typer.Option("--provider", "-p")] = Provider.openai,
+    detail: Annotated[Detail, typer.Option("--detail")] = Detail.standard,
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    try:
+        text, word_count = read_file(file)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    capable = ANT_CAPABLE if provider == Provider.anthropic else OAI_CAPABLE
+    default = ANT_DEFAULT if provider == Provider.anthropic else OAI_DEFAULT
+    model = capable if word_count > 10_000 else default
+
+    client = get_client(provider.value)
+
+    schema = DocumentSummary.model_json_schema()
+    prompt = (
+        f"{DETAIL_INSTRUCTIONS[detail]}\n\n"
+        f"Respond with a JSON object matching this schema:\n{json.dumps(schema, indent=2)}\n\n"
+        f"Document:\n{text}"
+    )
+
+    messages = [
+        {"role": "system", "content": "You are a document analysis assistant. Respond only with valid JSON."},
+        {"role": "user", "content": prompt},
+    ]
+
+    start = time.perf_counter()
+    result = client.complete(messages, model=model)
+    latency = time.perf_counter() - start
+
+    if not result:
+        console.print("[red]Request failed.[/red]")
+        raise typer.Exit(1)
+
+    try:
+        raw = result["text"].strip().removeprefix("```json").removesuffix("```").strip()
+        summary = DocumentSummary.model_validate_json(raw)
+    except Exception as e:
+        console.print(f"[red]Failed to parse response: {e}[/red]")
+        raise typer.Exit(1)
+
+    log_response(result, provider.value, "analyse", latency)
+
+    if as_json:
+        print(summary.model_dump_json(indent=2))
+        return
+
+    console.print(f"\n[bold]{summary.title}[/bold]")
+    console.print(f"Words: {summary.word_count}  |  Sentiment: {summary.sentiment}\n")
+    console.print("[bold]Topics:[/bold]")
+    for t in summary.main_topics:
+        console.print(f"  • {t}")
+    console.print("\n[bold]Key points:[/bold]")
+    for p in summary.key_points:
+        console.print(f"  • {p}")
+    if summary.recommended_actions:
+        console.print("\n[bold]Recommended actions:[/bold]")
+        for a in summary.recommended_actions:
+            console.print(f"  • {a}")
+    console.print(f"\n[dim]cost: ${result['cost']:.6f}  latency: {latency:.2f}s[/dim]")
 
 
 if __name__ == "__main__":
