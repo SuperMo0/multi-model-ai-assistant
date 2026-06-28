@@ -1,5 +1,30 @@
 # Multi-model AI assistant
 
+
+## how to run
+
+```bash
+# interactive chat
+uv run ai.py chat
+
+# chat with anthropic and a named session
+uv run ai.py chat -p anthropic -s my-session
+
+# analyse a file
+uv run ai.py analyse report.pdf
+
+# analyse with more detail and use anthropic
+uv run ai.py analyse notes.txt -p anthropic --detail detailed
+
+# compare both providers on the same prompt
+uv run ai.py compare "explain how neural networks work"
+
+# see your cost breakdown
+uv run ai.py costs
+```
+
+---
+
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![OpenAI](https://img.shields.io/badge/OpenAI-%23412991.svg?style=for-the-badge&logo=openai&logoColor=white)
 ![Anthropic](https://img.shields.io/badge/Anthropic-%23CC785C.svg?style=for-the-badge&logo=anthropic&logoColor=white)
@@ -54,30 +79,6 @@ then create a `.env` file in the root with your api keys:
 ```env
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
-```
-
----
-
-## how to run
-
-```bash
-# interactive chat
-uv run ai.py chat
-
-# chat with anthropic and a named session
-uv run ai.py chat -p anthropic -s my-session
-
-# analyse a file
-uv run ai.py analyse report.pdf
-
-# analyse with more detail and use anthropic
-uv run ai.py analyse notes.txt -p anthropic --detail detailed
-
-# compare both providers on the same prompt
-uv run ai.py compare "explain how neural networks work"
-
-# see your cost breakdown
-uv run ai.py costs
 ```
 
 ---
